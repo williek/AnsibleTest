@@ -2,23 +2,24 @@
   hosts: localhost
   gather_facts: false
   vars:
-    tower_host: "https://sandbox-aap-wcardozo-dev.apps.rm3.7wse.p1.openshiftapps.com"
-    tower_oauth_token: IKq1VQCJcCRPz8butUWVDb1HWGdiSC
-    workflow_id: 10        # id ou nome do workflow template
-    extra_vars:                  # vars opcionais para o workflow
-    env: dev
+    controller_host: "https://sandbox-aap-wcardozo-dev.apps.rm3.7wse.p1.openshiftapps.com"
+    # controller_oauthtoken : IKq1VQCJcCRPz8butUWVDb1HWGdiSC
+    # workflow_id: 10        # id ou nome do workflow template
+    extra_vars:
+      # vars opcionais para o workflow
+      env: dev
 
   tasks:
     - name: Launch workflow and wait until finished
       awx.awx.workflow_launch:
         name: "Many"
-        # tower_host: "{{ tower_host }}"
-        # tower_oauth_token: "{{ tower_oauth_token }}"
+        controller_host: "{{ controller_host }}"
+        # controller_oauthtoken : "{{ controller_oauthtoken  }}"
         # validate_certs: false
         # workflow_job_template: "{{ workflow_id }}"
         # extra_vars: "{{ extra_vars }}"
         # wait: true # aguarda até terminar
-        # timeout: 60 # segundos
+        timeout: 60 # segundos
       register: wf_result
 
     - name: Mostrar resumo do workflow
