@@ -1,0 +1,22 @@
+- name: Lançar workflow via API Tower
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Launch workflow job (API)
+      ansible.builtin.uri:
+        url: "{{ tower_host }}/api/v2/workflow_job_templates/{{ workflow_id }}/launch/"
+        method: POST
+        headers:
+          Authorization: "Bearer {{ tower_oauth_token }}"
+          Content-Type: "application/json"
+        body_format: json
+        body:
+          extra_vars: "{{ extra_vars }}"
+        status_code:
+          - 201
+          - 202
+      register: api_launch
+
+    - name: Mostrar retorno da API
+      ansible.builtin.debug:
+        var: api_launch.json
