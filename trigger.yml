@@ -1,71 +1,73 @@
-- name: Disparar workflow no Tower/AAP
+# - name: Disparar workflow no Tower/AAP
+#   hosts: localhost
+#   gather_facts: false
+
+#   tasks:
+#     - name: Launch workflow and wait until finished
+#       awx.awx.workflow_launch:
+#         name: "10"
+#         controller_host: "{{ controller_host }}"
+#         controller_oauthtoken : "{{ controller_oauthtoken  }}"
+#         # validate_certs: false
+#         # workflow_job_template: "{{ workflow_id }}"
+#         # extra_vars: "{{ extra_vars }}"
+#         # wait: true # aguarda até terminar
+#         timeout: 60 # segundos
+#       register: wf_result
+
+#     - name: Mostrar resumo do workflow
+#       ansible.builtin.debug:
+#         var: wf_result
+
+- name: Lançar workflow via API Tower
   hosts: localhost
   gather_facts: false
   vars:
     controller_host: "https://sandbox-aap-wcardozo-dev.apps.rm3.7wse.p1.openshiftapps.com"
-    # controller_oauthtoken : IKq1VQCJcCRPz8butUWVDb1HWGdiSC
-    # workflow_id: 10        # id ou nome do workflow template
+    controller_oauthtoken: IKq1VQCJcCRPz8butUWVDb1HWGdiSC
+    workflow_id: 10 # id ou nome do workflow template
+    timeout: 60
+    poll_interval: 5
     extra_vars:
       # vars opcionais para o workflow
       env: dev
-
   tasks:
-    - name: Launch workflow and wait until finished
-      awx.awx.workflow_launch:
-        name: "Many"
-        controller_host: "{{ controller_host }}"
-        # controller_oauthtoken : "{{ controller_oauthtoken  }}"
-        # validate_certs: false
-        # workflow_job_template: "{{ workflow_id }}"
-        # extra_vars: "{{ extra_vars }}"
-        # wait: true # aguarda até terminar
-        timeout: 60 # segundos
-      register: wf_result
+    - name: Launch workflow job (API)
+      ansible.builtin.uri:
+        url: "{{ controller_host }}/api/controller/v2/workflow_job_templates/{{ workflow_id }}/launch/"
+        method: POST
+        headers: &header
+          Authorization: "Bearer {{ controller_oauthtoken }}"
+          Content-Type: "application/json"
+        body_format: json
+        body:
+          extra_vars: "{{ extra_vars }}"
+        status_code: &status_code
+          - 201
+          - 202
+      register: api_launch
 
-    - name: Mostrar resumo do workflow
+    - name: Mostrar retorno da API
       ansible.builtin.debug:
-        var: wf_result
+        var: api_launch.json
 
-# - name: Lançar workflow via API Tower
-#   hosts: localhost
-#   gather_facts: false
-#   tasks:
-#     - name: Launch workflow job (API)
-#       ansible.builtin.uri:
-#         url: "{{ tower_host }}/api/controller/v2/workflow_job_templates/{{ workflow_id }}/launch/"
-#         method: POST
-#         headers:
-#           Authorization: "Bearer {{ tower_oauth_token }}"
-#           Content-Type: "application/json"
-#         body_format: json
-#         body:
-#           extra_vars: "{{ extra_vars }}"
-#         status_code:
-#           - 201
-#           - 202
-#       register: api_launch
+    - name: Wait until workflow finishes
+      vars:
+        finished_states:
+          - "successful"
+          - "failed"
+          - "error"
+          - "canceled"
+      ansible.builtin.uri:
+        headers: *header
+        url: "{{ controller_host }}{{ api_launch.json.url }}/"
+        method: GET
+        status_code: *status_code
+      register: wf_status
+      retries: "{{ (timeout / poll_interval) | int }}"
+      delay: "{{ poll_interval }}"
+      until: wf_status.json.status in finished_states
 
-#     - name: Mostrar retorno da API
-#       ansible.builtin.debug:
-#         var: api_launch.json
-
-# fetch("https://sandbox-aap-wcardozo-dev.apps.rm3.7wse.p1.openshiftapps.com/api/controller/v2/workflow_job_templates/10/launch/", {
-#   "headers": {
-#     "accept": "*/*",
-#     "accept-language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
-#     "accepts": "application/json",
-#     "content-type": "application/json",
-#     "sec-ch-ua": "\"Chromium\";v=\"142\", \"Microsoft Edge\";v=\"142\", \"Not_A Brand\";v=\"99\"",
-#     "sec-ch-ua-mobile": "?0",
-#     "sec-ch-ua-platform": "\"Windows\"",
-#     "sec-fetch-dest": "empty",
-#     "sec-fetch-mode": "cors",
-#     "sec-fetch-site": "same-origin",
-#     "x-csrftoken": "fKtfggzM63lyXRUjvxFvGWXKwo7bTfaq"
-#   },
-#   "referrer": "https://sandbox-aap-wcardozo-dev.apps.rm3.7wse.p1.openshiftapps.com/execution/templates/workflow-job-template/10/details",
-#   "body": "{}",
-#   "method": "POST",
-#   "mode": "cors",
-#   "credentials": "include"
-# });
+    - name: Display final result
+      ansible.builtin.debug:
+        msg: "Workflow {{ api_launch.json.id }} finalizado com status: {{ wf_status.json.status }}"
